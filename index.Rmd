@@ -1,0 +1,280 @@
+---
+title: "Exploring the Spotify API with R"
+subtitle: "A Tutorial for Beginners, <br> by a Beginner"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+---
+```{r, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+
+Hello and welcome to my first GitHub site! My name is Mia and I’m a college student in Saint Paul, Minnesota. I’ve been learning R for the past few months in my “Intro to Data Science” class, but I am still very much a beginner. Throughout this process, I have relied heavily on internet tutorials like the ones on r-bloggers.com, so I decided to make my own. I hope this tutorial can be helpful for another beginner. Coding is intimidating, but if I can do it, so can you!
+
+In this tutorial, we’ll be exploring Spotify data -- how to access it using the Spotify API and spotifyr wrapper package, as well as what all those variables actually mean. I’ve found that Spotify is a great site to get data from because the information is so widely available and they have really unique indices to quantify music. In this tutorial, we’ll be exploring three of these indices: speechiness, key, and danceability. I’ll describe what each of them mean musically, then show different ways to dynamically represent them using ggplot2 and plotly. 
+
+```{r}
+library(dplyr)
+library(spotifyr)
+library(plotly)
+```
+
+```{r, include=FALSE}
+library(devtools)
+library(tidyr)
+```
+
+1. The first step in accessing Spotify data is to get an API key. To do so, log in to your dashboard on the [“Spotify for Developers”](https://developer.spotify.com/dashboard/) page. 
+
+```{r echo=FALSE}
+knitr::include_graphics("spotifydashboard.png")
+```
+
+2. Select “Create a Client ID” and fill out the required questions. This will take you to a page that shows your Client ID and Client Secret. 
+
+3. Add the following code to your R markdown:
+
+```{r, include=FALSE}
+app_id1 <- 'Test'
+client_id1 <- '1bca77784d1342e68436f521d3f48768'
+client_secret1 <- 'ca2e692c3f8d4af09564e85801bfcf30'
+
+Sys.setenv(SPOTIFY_CLIENT_ID = client_id1)
+Sys.setenv(SPOTIFY_CLIENT_SECRET = client_secret1)
+
+access_token <- get_spotify_access_token()
+```
+
+```{r, eval=FALSE}
+id <- ‘your client ID’
+secret <- ‘your client secret’
+Sys.setenv(SPOTIFY_CLIENT_ID = id)
+Sys.setenv(SPOTIFY_CLIENT_SECRET = secret)
+access_token <- get_spotify_access_token()
+```
+
+4. Now that you have your Spotify access token, you can begin getting data using [spotifyr](https://cran.r-project.org/web/packages/spotifyr/spotifyr.pdf). In this example, I wanted to compare the Top 50 playlist from four different countries (Taiwan, France, Bolivia, and the U.S.). To do so, I manually added the songs from the four Top 50 playlists to new new playlists in my own account. This is a bit tedious, but hey -- we're beginners here! And it works!
+
+*It's important to note that Spotify's Top 50 playlists are updated regularly, so the data I show here only represents the Top 50 playlists in each of these four countries for November 2018!*
+
+5. Use the `get_user_playlists`, `get_playlist_tracks`, and `get_track_audio_features` functions and your own Spotify id to retrieve data about all the songs on the playlists.
+
+```{r, include=FALSE}
+my_id <- '1214112002'
+my_plists <- get_user_playlists(my_id)
+my_plists2 <- my_plists %>%
+  filter(playlist_name %in% c('Taiwan Top 50', 'France Top 50', 'Bolivia Top 50', 'U.S. Top 50'))
+tracks <- get_playlist_tracks(my_plists2)
+features <- get_track_audio_features(tracks)
+tracks2 <- tracks%>%
+  left_join(features, by="track_uri")%>%
+  mutate(difference=speechiness-0.33)%>%
+  filter(!(track_name == "Culpables"))%>%
+  filter(!(track_name == "Kiss and Make Up"))
+```
+
+```{r, eval=FALSE}
+my_id <- 'your spotify id'
+my_plists <- get_user_playlists(my_id)
+
+my_plists2 <- my_plists %>%
+  filter(playlist_name %in% c('Taiwan Top 50', 'France Top 50', 'Bolivia Top 50', 'U.S. Top 50'))
+
+tracks <- get_playlist_tracks(my_plists2)
+features <- get_track_audio_features(tracks)
+
+```
+
+6. Do a `left_join` to join the two tables (playlist tracks and track features) by the "track_uri" column.
+
+```{r, eval=FALSE}
+tracks2 <- tracks%>%
+  left_join(features, by="track_uri")
+```
+
+**Check out all those cool variables! We're going to explore three of them today, starting with *speechiness*.**
+
+The Spotify ["Get Audio Features"](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/) page says that speechiness refers to the presence of spoken words in a song. Songs with a speechiness score between 0.33 and 0.66 contain both music and speech; they could be rap songs, for example. Based on this, we're going to look at speechiness based on the difference between the speechiness score and 0.33. If the difference is above 0, it's most likely a rap song. The farther below 0, the more instrumental the track is.
+
+"Yes Indeed" by Lil Baby and Drake has the highest speechiness of any song on all four playlists:
+
+<iframe src="https://open.spotify.com/embed/track/6vN77lE9LK6HP2DewaN6HZ" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+
+"殘缺的彩虹" by Cheer Chen has the lowest speechiness:
+
+<iframe src="https://open.spotify.com/embed/track/0SvqolKhBNM7WVEXJGLIMO" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+
+7. Use `mutate` to create a new column that calculates a speechiness difference score by subracting 0.33 from the speechiness.
+
+```{r, eval=FALSE}
+tracks2 <- tracks2%>%
+  mutate(difference=speechiness-0.33)
+```
+
+8. For the sake of ease and aesthetics, I specified my colors. This step is optional, but it happens to be my favorite part of making visualizations.
+
+```{r}
+green <- "#1ed760"
+yellow <- "#e7e247"
+pink <- "#ff6f59"
+blue <- "#17bebb"
+```
+
+9. I used ggplot2 to make a `geom_col` of the speechiness difference scores and faceted them by country to make it easier to compare the four. Since the main point of the graph is not necessarily to show the numerical speechiness difference score, but rather how far each bar goes above or below zero, I took out the grid lines. I think this also makes it look more sleek. I used ggplotly to make the graph interactive so users can zoom in and see the track, artist, and speechiness each bar represents. 
+
+```{r}
+viz1 <- ggplot(tracks2, aes(x=reorder(track_name, -difference), y=difference, fill=playlist_name, text=(paste("Track:", track_name, "<br>",
+                                      "Artist:", artist_name, "<br>",
+                                      "Speechiness:", speechiness))))+
+  geom_col()+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  theme_minimal()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position="none")+
+  ylab("Speechiness Difference")+
+  facet_wrap(~ playlist_name)+
+  ggtitle("Speechiness Difference")
+
+ggplotly(viz1, tooltip=c("text"))
+
+```
+
+France has more bars above zero than any of the other countries, which implies that there are more rap songs on the France Top 50 than other playlists. 
+
+"Air Max" by Rim'K and Ninho is the speechiest song on the France Top 50.
+
+<iframe src="https://open.spotify.com/embed/track/6qk9lEM6UIxNbAuI0PpOLu" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+
+Taiwan is the only country with no bars above zero and it has a a high concentration of tracks with speechiness differences below zero. Therefore, its Top 50 playlist must have more instrumental tracks or tracks with very little spoken word presence.  
+
+**Now that we've explored *speechiness*, let's look into another variable -- *key*.**
+
+Musical key describes the scale on which a song is based. This means that most of the notes in a song will come from the scale of that key. If a song is in the key of C#, most of its notes come from the C# major scale. Click [here](https://www.studybass.com/lessons/harmony/keys-in-music/) to read more about keys in music!  
+
+Key is an interesting variable to consider because it represents an important aspect of musical preference, and a [research has linked musical preference to factors like biology and culture.](https://slate.com/culture/2012/06/in-scientific-studies-of-music-whats-missing-is-the-culture.html)
+
+10. In order to represent key graphically, I first wanted to create a data table that shows:
+  - how many songs from each playlist are in certain keys
+  - the total number of songs in each key
+  - the percentage of songs in each key that come from each playlist.
+
+```{r}
+key_country <- tracks2%>%
+  select(playlist_name, key)%>%
+  group_by(playlist_name, key)%>%
+  mutate(n=n())%>%
+  unique()%>%
+  group_by(key)%>%
+  mutate(total=sum(n))%>%
+  mutate(percent=round((n/total)*100))
+
+head(key_country, 10)
+```
+
+11. Using ggplot2 and plotly, I represented key as a `geom_bar` in two different graphs. In the first, I used `position="fill"` to show the percentage of songs in each key that come from each country. My second graph is almost exactly the same but does not use `position="fill"`.  
+
+```{r}
+viz2 <- ggplot(key_country, aes(x=key, fill=playlist_name, y = n, 
+                                text = paste("Number of Songs: ", n, "<br>",
+                                            "Percent Songs in Key: ", percent, "%")))+
+  geom_bar(position="fill", width=0.5, stat = "identity")+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Key", y="Percent of Songs")+
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Musical Key Percentage by Playlist")
+
+ggplotly(viz2, tooltip=c("text"))
+```
+
+Bar graphs that use `position="fill"` have strengths as well as weaknesses. In this instance, it's helpful to see that A#, C#, and G appear to have the most even distribution across playlists. It's also interesting to note that Bolivia and Taiwan are the only playlists that feature songs in the key of D#. People from Bolivia and Taiwan must love listening to lots of songs in D#, right?
+
+```{r}
+viz3 <- ggplot(key_country, aes(x=key, fill=playlist_name, y = n, 
+                                text = paste("Number of Songs: ", n, "<br>",
+                                            "Percent Songs in Key: ", percent, "%")))+
+  geom_bar(width=0.5, stat = "identity")+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Key", y="Number of Songs") +
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Musical Key Makeup by Playlist")
+
+ggplotly(viz3, tooltip=c("text"))
+```
+
+**Wrong!**
+
+Remember when we looked at the `position="fill"` chart and noticed that all the songs in D# were from Bolivia and Taiwan? That made it seem like the Bolivia and Taiwan Top 50 playlists featured a lot of songs in that key. However, when we look at this `geom_bar` that shows the raw numbers of songs in each key, we see that D# has the fewest songs by far; of the 196 unique songs on the four Top 50 playlists, only three are in D#. Making the first graph interactive so users can view number of songs by hovering over the bars is one way to mitigate the misleadingness of the `position="fill"` graph, but using raw numbers might be even more effective.
+
+I found this pretty interesting, so I did some further investigation and found that the one song on Bolivia's Top 50 playlist in D# is Queen's "Bohemian Rhapsody", a song known for it's complex and varied musical structure. 
+
+<iframe src="https://open.spotify.com/embed/track/7tFiyTwD0nx5a1eklYtX2J" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+
+The nearly six-minute song contains parts in four different keys. Thus, key changes are important to be aware of when analyzing key using Spotify data, especially if you're looking at Beyonce's "Love on Top", which contains [fourteen key changes](https://www.youtube.com/watch?v=MHO3GMJcZZ4) (just kidding, it's actually only [four](https://www.youtube.com/watch?v=Ob7vObnFUJc)). I'm not sure whether Spotify only records the key in which a song begins or the key the majority of the song is in; either way, it does not give a complete picture.
+
+**So far, we've looked at the speechiness and key variables. Now, it's time to move on to our final variable: *danceability*!**
+
+Spotify's danceability index is based on "tempo, rhythm stability, beat strength, and overall regularity". To see how the four playlists compared in danceability, I decided to make a density plot, which shows distribution of data. 
+
+12. I used ggplot2 to make a `geom_density` of the danceability data for the four playlists. I changed the alpha to 0.7 so all four density plots would be visible. 
+
+```{r}
+viz4 <- ggplot(tracks2, aes(x=danceability, fill=playlist_name,
+                    text = paste(playlist_name)))+
+  geom_density(alpha=0.7, color=NA)+
+  scale_fill_manual(values=c(green, yellow, pink, blue))+
+  labs(x="Danceability", y="Density") +
+  guides(fill=guide_legend(title="Playlist"))+
+  theme_minimal()+
+  ggtitle("Distribution of Danceability Data")
+
+ggplotly(viz4, tooltip=c("text"))
+```
+
+This graph seems to suggest that the U.S. has the widest range of danceability in its top 50 playlist, and that both Bolivia's and France's top 50 playlists are mostly made up of songs on the higher end of the danceability spectrum.
+
+After looking at this graph, I wanted to know the range between each country's most and least danceable song. 
+
+13. First, I used `group_by`, `mutate`, `select`, and `unique` to create a new datatable with just four rows that show:
+  - the playlist name
+  - the maximum danceability value of songs on that playlist
+  - the minimum danceability value of songs on that playlist
+
+```{r}
+tracks3 <- tracks2 %>%
+  group_by(playlist_name)%>%
+  mutate(max=max(danceability))%>%
+  mutate(min=min(danceability))%>%
+  select(playlist_name, max, min)%>%
+  unique()
+```
+
+14. I used plotly to make a [dumbbell plot](https://plot.ly/r/dumbbell-plots/#dot-and-dumbbell-plots) showing the range in danceability values for each playlist. This was my first time using plotly to make graphs -- I think it turned out pretty well!
+
+```{r}
+viz5 <- plot_ly(tracks3, color = I("gray80"),  
+              hoverinfo = 'text') %>%
+  add_segments(x = ~max, xend = ~min, y = ~playlist_name, yend = ~playlist_name, showlegend = FALSE) %>%
+  add_markers(x = ~max, y = ~playlist_name, name = "Maximum Danceability Value", color = I(pink), text=~paste('Max Danceability: ', max)) %>%
+  add_markers(x = ~min, y = ~playlist_name, name = "Minimum Danceability Value", color = I(blue), text=~paste('Min Danceability: ', min))%>%
+  layout(
+    title = "Playlist Danceability Range",
+    xaxis = list(title = "Danceability"),
+    yaxis= list(title=""))
+
+ggplotly(viz5)
+```
+
+The United States Top 50 does, as I predicted, have the widest range in danceability. It contains both the most danceable (["Yes Indeed" by Lil Baby](https://www.youtube.com/watch?v=AbEHRrq7xwU)) and least danceable (["It's the Most Wonderful Time of the Year" by Andy Williams](https://www.youtube.com/watch?v=73UqDX_quk0)) songs from all four playlists. It's interesting to note that I personally would rather dance to the latter. 
+
+**Thank you for checking out my first ever R tutorial!**
+
+I hope you learned a little something about the Spotify API and their data, the spotifyr package, ggplot2/ggplotly/plotly, or the interesting musical trends of November 2018!
+
+Thank you to Ashley Nepp for a great semester in Geoviz and Katie Jolly for infinite R support.
